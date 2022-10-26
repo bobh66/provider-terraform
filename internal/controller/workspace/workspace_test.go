@@ -69,6 +69,7 @@ type MockTf struct {
 	MockApply                  func(ctx context.Context, o ...terraform.Option) error
 	MockDestroy                func(ctx context.Context, o ...terraform.Option) error
 	MockDeleteCurrentWorkspace func(ctx context.Context) error
+	MockGenerateChecksum       func(ctx context.Context) (string, error)
 }
 
 func (tf *MockTf) Init(ctx context.Context, o ...terraform.InitOption) error {
@@ -101,6 +102,10 @@ func (tf *MockTf) Destroy(ctx context.Context, o ...terraform.Option) error {
 
 func (tf *MockTf) DeleteCurrentWorkspace(ctx context.Context) error {
 	return tf.MockDeleteCurrentWorkspace(ctx)
+}
+
+func (tf *MockTf) GenerateChecksum(ctx context.Context) (string, error) {
+	return tf.MockGenerateChecksum(ctx)
 }
 
 func TestConnect(t *testing.T) {
@@ -553,6 +558,71 @@ func TestConnect(t *testing.T) {
 				},
 			},
 			want: errors.Wrap(errBoom, errWriteMain),
+		},
+		"GenerateChecksumError": {
+			reason: "We should return any error when generating the workspace checksum",
+			fields: fields{kube: &test.MockClient{
+				MockGet: test.NewMockGetFn(nil),
+			},
+				usage: resource.TrackerFn(func(_ context.Context, _ resource.Managed) error { return nil }),
+				fs:    afero.Afero{Fs: afero.NewMemMapFs()},
+				terraform: func(_ string) tfclient {
+					return &MockTf{
+						MockGenerateChecksum: func(ctx context.Context) (string, error) { return "", errBoom },
+					}
+				},
+			},
+			args: args{
+				mg: &v1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{UID: uid},
+					Spec: v1alpha1.WorkspaceSpec{
+						ResourceSpec: xpv1.ResourceSpec{
+							ProviderConfigReference: &xpv1.Reference{},
+						},
+						ForProvider: v1alpha1.WorkspaceParameters{
+							Module: "I'm HCL!",
+							Source: v1alpha1.ModuleSourceInline,
+						},
+					},
+					Status: v1alpha1.WorkspaceStatus{
+						Checksum: "checksum",
+					},
+				},
+			},
+			want: errors.Wrap(errBoom, errChecksum),
+		},
+		"ChecksumMatches": {
+			reason: "We should return any error when generating the workspace checksum",
+			fields: fields{kube: &test.MockClient{
+				MockGet: test.NewMockGetFn(nil),
+			},
+				usage: resource.TrackerFn(func(_ context.Context, _ resource.Managed) error { return nil }),
+				fs:    afero.Afero{Fs: afero.NewMemMapFs()},
+				terraform: func(_ string) tfclient {
+					return &MockTf{
+						MockGenerateChecksum: func(ctx context.Context) (string, error) { return "checksum", nil },
+						MockWorkspace:        func(_ context.Context, _ string) error { return nil },
+					}
+				},
+			},
+			args: args{
+				mg: &v1alpha1.Workspace{
+					ObjectMeta: metav1.ObjectMeta{UID: uid},
+					Spec: v1alpha1.WorkspaceSpec{
+						ResourceSpec: xpv1.ResourceSpec{
+							ProviderConfigReference: &xpv1.Reference{},
+						},
+						ForProvider: v1alpha1.WorkspaceParameters{
+							Module: "I'm HCL!",
+							Source: v1alpha1.ModuleSourceInline,
+						},
+					},
+					Status: v1alpha1.WorkspaceStatus{
+						Checksum: "checksum",
+					},
+				},
+			},
+			want: nil,
 		},
 		"TerraformInitError": {
 			reason: "We should return any error encountered while initializing Terraform",

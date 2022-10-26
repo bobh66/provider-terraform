@@ -142,6 +142,7 @@ type WorkspaceSpec struct {
 type WorkspaceStatus struct {
 	xpv1.ResourceStatus `json:",inline"`
 	AtProvider          WorkspaceObservation `json:"atProvider,omitempty"`
+	Checksum            string               `json:"checksum,omitempty"`
 }
 
 // +kubebuilder:object:root=true
