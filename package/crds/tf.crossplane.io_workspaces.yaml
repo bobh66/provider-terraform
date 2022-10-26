@@ -361,6 +361,8 @@ spec:
                       type: string
                     type: object
                 type: object
+              checksum:
+                type: string
               conditions:
                 description: Conditions of the resource.
                 items:

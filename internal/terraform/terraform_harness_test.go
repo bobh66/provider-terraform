@@ -161,7 +161,7 @@ func TestDeleteWorkspace(t *testing.T) {
 			defer os.RemoveAll(dir)
 
 			tf := Harness{Path: tfBinaryPath, Dir: dir}
-			ws := tf.Workspace(tc.args.ctx, tc.args.name)
+			_ = tf.Workspace(tc.args.ctx, tc.args.name)
 			got := tf.DeleteCurrentWorkspace(tc.args.ctx)
 
 			if diff := cmp.Diff(tc.want, got, test.EquateErrors()); diff != "" {

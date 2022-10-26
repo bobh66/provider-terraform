@@ -72,6 +72,7 @@ const (
 	errDestroy           = "cannot destroy Terraform configuration"
 	errVarFile           = "cannot get tfvars"
 	errDeleteWorkspace   = "cannot delete Terraform workspace"
+	errChecksum        = "cannot calculate workspace checksum"
 
 	gitCredentialsFilename = ".git-credentials"
 )
@@ -101,6 +102,7 @@ type tfclient interface {
 	Apply(ctx context.Context, o ...terraform.Option) error
 	Destroy(ctx context.Context, o ...terraform.Option) error
 	DeleteCurrentWorkspace(ctx context.Context) error
+	GenerateChecksum(ctx context.Context) (string, error)
 }
 
 // Setup adds a controller that reconciles Workspace managed resources.
@@ -253,6 +255,17 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 	}
 
 	tf := c.terraform(dir)
+	if cr.Status.Checksum != "" {
+		checksum, err := tf.GenerateChecksum(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, errChecksum)
+		}
+		if cr.Status.Checksum == checksum {
+			// Skip running terraform init since nothing has changed
+			return &external{tf: tf, kube: c.kube}, errors.Wrap(tf.Workspace(ctx, meta.GetExternalName(cr)), errWorkspace)
+		}
+		cr.Status.Checksum = checksum
+	}
 	o := make([]terraform.InitOption, 0, len(cr.Spec.ForProvider.InitArgs))
 	o = append(o, terraform.WithInitArgs(cr.Spec.ForProvider.InitArgs))
 	// NOTE(ytsarev): user tf provider cache mechanism to speed up
